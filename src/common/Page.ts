@@ -587,7 +587,7 @@ export class Page extends EventEmitter {
       this._frameManager.initialize(),
       this._client.send('Target.setAutoAttach', {
         autoAttach: true,
-        waitForDebuggerOnStart: false,
+        waitForDebuggerOnStart: true,
         flatten: true,
       }),
       this._client.send('Performance.enable'),

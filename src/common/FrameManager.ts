@@ -142,7 +142,7 @@ export class FrameManager extends EventEmitter {
         client !== this._client
           ? client.send('Target.setAutoAttach', {
               autoAttach: true,
-              waitForDebuggerOnStart: false,
+              waitForDebuggerOnStart: true,
               flatten: true,
             })
           : Promise.resolve(),
@@ -159,6 +159,7 @@ export class FrameManager extends EventEmitter {
         client === this._client
           ? this._networkManager.initialize()
           : Promise.resolve(),
+        client.send('Runtime.runIfWaitingForDebugger'),
       ]);
     } catch (error) {
       // The target might have been closed before the initialization finished.

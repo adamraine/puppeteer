@@ -144,8 +144,6 @@ module.exports = {
         // We don't require explicit return types on basic functions or
         // dummy functions in tests, for example
         '@typescript-eslint/explicit-function-return-type': 0,
-        // We know it's bad and use it very sparingly but it's needed :(
-        '@typescript-eslint/ban-ts-ignore': 0,
         // We allow non-null assertions if the value was asserted using `assert` API.
         '@typescript-eslint/no-non-null-assertion': 0,
         /**

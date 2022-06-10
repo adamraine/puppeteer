@@ -64,14 +64,14 @@ type KeyDescription = Required<
  * @public
  */
 export class Keyboard {
-  private _client: CDPSession;
+  #client: CDPSession;
   /** @internal */
   _modifiers = 0;
-  private _pressedKeys = new Set<string>();
+  #pressedKeys = new Set<string>();
 
   /** @internal */
   constructor(client: CDPSession) {
-    this._client = client;
+    this.#client = client;
   }
 
   /**
@@ -103,14 +103,14 @@ export class Keyboard {
     key: KeyInput,
     options: { text?: string } = { text: undefined }
   ): Promise<void> {
-    const description = this._keyDescriptionForString(key);
+    const description = this.#keyDescriptionForString(key);
 
-    const autoRepeat = this._pressedKeys.has(description.code);
-    this._pressedKeys.add(description.code);
-    this._modifiers |= this._modifierBit(description.key);
+    const autoRepeat = this.#pressedKeys.has(description.code);
+    this.#pressedKeys.add(description.code);
+    this._modifiers |= this.#modifierBit(description.key);
 
     const text = options.text === undefined ? description.text : options.text;
-    await this._client.send('Input.dispatchKeyEvent', {
+    await this.#client.send('Input.dispatchKeyEvent', {
       type: text ? 'keyDown' : 'rawKeyDown',
       modifiers: this._modifiers,
       windowsVirtualKeyCode: description.keyCode,
@@ -124,7 +124,7 @@ export class Keyboard {
     });
   }
 
-  private _modifierBit(key: string): number {
+  #modifierBit(key: string): number {
     if (key === 'Alt') return 1;
     if (key === 'Control') return 2;
     if (key === 'Meta') return 4;
@@ -132,7 +132,7 @@ export class Keyboard {
     return 0;
   }
 
-  private _keyDescriptionForString(keyString: KeyInput): KeyDescription {
+  #keyDescriptionForString(keyString: KeyInput): KeyDescription {
     const shift = this._modifiers & 8;
     const description = {
       key: '',
@@ -175,11 +175,11 @@ export class Keyboard {
    * for a list of all key names.
    */
   async up(key: KeyInput): Promise<void> {
-    const description = this._keyDescriptionForString(key);
+    const description = this.#keyDescriptionForString(key);
 
-    this._modifiers &= ~this._modifierBit(description.key);
-    this._pressedKeys.delete(description.code);
-    await this._client.send('Input.dispatchKeyEvent', {
+    this._modifiers &= ~this.#modifierBit(description.key);
+    this.#pressedKeys.delete(description.code);
+    await this.#client.send('Input.dispatchKeyEvent', {
       type: 'keyUp',
       modifiers: this._modifiers,
       key: description.key,
@@ -205,7 +205,7 @@ export class Keyboard {
    * @param char - Character to send into the page.
    */
   async sendCharacter(char: string): Promise<void> {
-    await this._client.send('Input.insertText', { text: char });
+    await this.#client.send('Input.insertText', { text: char });
   }
 
   private charIsKey(char: string): char is KeyInput {
@@ -356,18 +356,18 @@ export interface MouseWheelOptions {
  * @public
  */
 export class Mouse {
-  private _client: CDPSession;
-  private _keyboard: Keyboard;
-  private _x = 0;
-  private _y = 0;
-  private _button: MouseButton | 'none' = 'none';
+  #client: CDPSession;
+  #keyboard: Keyboard;
+  #x = 0;
+  #y = 0;
+  #button: MouseButton | 'none' = 'none';
 
   /**
    * @internal
    */
   constructor(client: CDPSession, keyboard: Keyboard) {
-    this._client = client;
-    this._keyboard = keyboard;
+    this.#client = client;
+    this.#keyboard = keyboard;
   }
 
   /**
@@ -383,17 +383,17 @@ export class Mouse {
     options: { steps?: number } = {}
   ): Promise<void> {
     const { steps = 1 } = options;
-    const fromX = this._x,
-      fromY = this._y;
-    this._x = x;
-    this._y = y;
+    const fromX = this.#x,
+      fromY = this.#y;
+    this.#x = x;
+    this.#y = y;
     for (let i = 1; i <= steps; i++) {
-      await this._client.send('Input.dispatchMouseEvent', {
+      await this.#client.send('Input.dispatchMouseEvent', {
         type: 'mouseMoved',
-        button: this._button,
-        x: fromX + (this._x - fromX) * (i / steps),
-        y: fromY + (this._y - fromY) * (i / steps),
-        modifiers: this._keyboard._modifiers,
+        button: this.#button,
+        x: fromX + (this.#x - fromX) * (i / steps),
+        y: fromY + (this.#y - fromY) * (i / steps),
+        modifiers: this.#keyboard._modifiers,
       });
     }
   }
@@ -428,13 +428,13 @@ export class Mouse {
    */
   async down(options: MouseOptions = {}): Promise<void> {
     const { button = 'left', clickCount = 1 } = options;
-    this._button = button;
-    await this._client.send('Input.dispatchMouseEvent', {
+    this.#button = button;
+    await this.#client.send('Input.dispatchMouseEvent', {
       type: 'mousePressed',
       button,
-      x: this._x,
-      y: this._y,
-      modifiers: this._keyboard._modifiers,
+      x: this.#x,
+      y: this.#y,
+      modifiers: this.#keyboard._modifiers,
       clickCount,
     });
   }
@@ -445,13 +445,13 @@ export class Mouse {
    */
   async up(options: MouseOptions = {}): Promise<void> {
     const { button = 'left', clickCount = 1 } = options;
-    this._button = 'none';
-    await this._client.send('Input.dispatchMouseEvent', {
+    this.#button = 'none';
+    await this.#client.send('Input.dispatchMouseEvent', {
       type: 'mouseReleased',
       button,
-      x: this._x,
-      y: this._y,
-      modifiers: this._keyboard._modifiers,
+      x: this.#x,
+      y: this.#y,
+      modifiers: this.#keyboard._modifiers,
       clickCount,
     });
   }
@@ -477,13 +477,13 @@ export class Mouse {
    */
   async wheel(options: MouseWheelOptions = {}): Promise<void> {
     const { deltaX = 0, deltaY = 0 } = options;
-    await this._client.send('Input.dispatchMouseEvent', {
+    await this.#client.send('Input.dispatchMouseEvent', {
       type: 'mouseWheel',
-      x: this._x,
-      y: this._y,
+      x: this.#x,
+      y: this.#y,
       deltaX,
       deltaY,
-      modifiers: this._keyboard._modifiers,
+      modifiers: this.#keyboard._modifiers,
       pointerType: 'mouse',
     });
   }
@@ -495,7 +495,7 @@ export class Mouse {
    */
   async drag(start: Point, target: Point): Promise<Protocol.Input.DragData> {
     const promise = new Promise<Protocol.Input.DragData>((resolve) => {
-      this._client.once('Input.dragIntercepted', (event) =>
+      this.#client.once('Input.dragIntercepted', (event) =>
         resolve(event.data)
       );
     });
@@ -511,11 +511,11 @@ export class Mouse {
    * @param data - drag data containing items and operations mask
    */
   async dragEnter(target: Point, data: Protocol.Input.DragData): Promise<void> {
-    await this._client.send('Input.dispatchDragEvent', {
+    await this.#client.send('Input.dispatchDragEvent', {
       type: 'dragEnter',
       x: target.x,
       y: target.y,
-      modifiers: this._keyboard._modifiers,
+      modifiers: this.#keyboard._modifiers,
       data,
     });
   }
@@ -526,11 +526,11 @@ export class Mouse {
    * @param data - drag data containing items and operations mask
    */
   async dragOver(target: Point, data: Protocol.Input.DragData): Promise<void> {
-    await this._client.send('Input.dispatchDragEvent', {
+    await this.#client.send('Input.dispatchDragEvent', {
       type: 'dragOver',
       x: target.x,
       y: target.y,
-      modifiers: this._keyboard._modifiers,
+      modifiers: this.#keyboard._modifiers,
       data,
     });
   }
@@ -541,11 +541,11 @@ export class Mouse {
    * @param data - drag data containing items and operations mask
    */
   async drop(target: Point, data: Protocol.Input.DragData): Promise<void> {
-    await this._client.send('Input.dispatchDragEvent', {
+    await this.#client.send('Input.dispatchDragEvent', {
       type: 'drop',
       x: target.x,
       y: target.y,
-      modifiers: this._keyboard._modifiers,
+      modifiers: this.#keyboard._modifiers,
       data,
     });
   }
@@ -580,15 +580,15 @@ export class Mouse {
  * @public
  */
 export class Touchscreen {
-  private _client: CDPSession;
-  private _keyboard: Keyboard;
+  #client: CDPSession;
+  #keyboard: Keyboard;
 
   /**
    * @internal
    */
   constructor(client: CDPSession, keyboard: Keyboard) {
-    this._client = client;
-    this._keyboard = keyboard;
+    this.#client = client;
+    this.#keyboard = keyboard;
   }
 
   /**
@@ -598,15 +598,15 @@ export class Touchscreen {
    */
   async tap(x: number, y: number): Promise<void> {
     const touchPoints = [{ x: Math.round(x), y: Math.round(y) }];
-    await this._client.send('Input.dispatchTouchEvent', {
+    await this.#client.send('Input.dispatchTouchEvent', {
       type: 'touchStart',
       touchPoints,
-      modifiers: this._keyboard._modifiers,
+      modifiers: this.#keyboard._modifiers,
     });
-    await this._client.send('Input.dispatchTouchEvent', {
+    await this.#client.send('Input.dispatchTouchEvent', {
       type: 'touchEnd',
       touchPoints: [],
-      modifiers: this._keyboard._modifiers,
+      modifiers: this.#keyboard._modifiers,
     });
   }
 }

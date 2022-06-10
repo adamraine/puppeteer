@@ -77,13 +77,10 @@ export interface PuppeteerLaunchOptions
  * @public
  */
 export class PuppeteerNode extends Puppeteer {
-  private _lazyLauncher?: ProductLauncher;
-  private _projectRoot?: string;
-  private __productName?: Product;
-  /**
-   * @internal
-   */
-  _preferredRevision: string;
+  #lazyLauncher?: ProductLauncher;
+  #projectRoot?: string;
+  #productName?: Product;
+  #preferredRevision: string;
 
   /**
    * @internal
@@ -98,15 +95,25 @@ export class PuppeteerNode extends Puppeteer {
     const { projectRoot, preferredRevision, productName, ...commonSettings } =
       settings;
     super(commonSettings);
-    this._projectRoot = projectRoot;
-    this.__productName = productName;
-    this._preferredRevision = preferredRevision;
+    this.#projectRoot = projectRoot;
+    this.#productName = productName;
+    this.#preferredRevision = preferredRevision;
 
     this.connect = this.connect.bind(this);
     this.launch = this.launch.bind(this);
     this.executablePath = this.executablePath.bind(this);
     this.defaultArgs = this.defaultArgs.bind(this);
     this.createBrowserFetcher = this.createBrowserFetcher.bind(this);
+  }
+
+  /** @internal */
+  get preferredRevision(): string {
+    return this.#preferredRevision;
+  }
+
+  /** @internal */
+  set preferredRevision(value: string) {
+    this.#preferredRevision = value;
   }
 
   /**
@@ -126,13 +133,13 @@ export class PuppeteerNode extends Puppeteer {
    * @internal
    */
   get _productName(): Product | undefined {
-    return this.__productName;
+    return this.#productName;
   }
 
   // don't need any TSDoc here - because the getter is internal the setter is too.
   set _productName(name: Product | undefined) {
-    if (this.__productName !== name) this._changedProduct = true;
-    this.__productName = name;
+    if (this.#productName !== name) this._changedProduct = true;
+    this.#productName = name;
   }
 
   /**
@@ -184,27 +191,27 @@ export class PuppeteerNode extends Puppeteer {
    */
   get _launcher(): ProductLauncher {
     if (
-      !this._lazyLauncher ||
-      this._lazyLauncher.product !== this._productName ||
+      !this.#lazyLauncher ||
+      this.#lazyLauncher.product !== this._productName ||
       this._changedProduct
     ) {
       switch (this._productName) {
         case 'firefox':
-          this._preferredRevision = PUPPETEER_REVISIONS.firefox;
+          this.#preferredRevision = PUPPETEER_REVISIONS.firefox;
           break;
         case 'chrome':
         default:
-          this._preferredRevision = PUPPETEER_REVISIONS.chromium;
+          this.#preferredRevision = PUPPETEER_REVISIONS.chromium;
       }
       this._changedProduct = false;
-      this._lazyLauncher = Launcher(
-        this._projectRoot,
-        this._preferredRevision,
+      this.#lazyLauncher = Launcher(
+        this.#projectRoot,
+        this.#preferredRevision,
         this._isPuppeteerCore,
         this._productName
       );
     }
-    return this._lazyLauncher;
+    return this.#lazyLauncher;
   }
 
   /**
@@ -234,11 +241,11 @@ export class PuppeteerNode extends Puppeteer {
    * @returns A new BrowserFetcher instance.
    */
   createBrowserFetcher(options: BrowserFetcherOptions): BrowserFetcher {
-    if (!this._projectRoot) {
+    if (!this.#projectRoot) {
       throw new Error(
         '_projectRoot is undefined. Unable to create a BrowserFetcher.'
       );
     }
-    return new BrowserFetcher(this._projectRoot, options);
+    return new BrowserFetcher(this.#projectRoot, options);
   }
 }

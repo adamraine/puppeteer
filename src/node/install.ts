@@ -68,7 +68,7 @@ export async function downloadBrowser(): Promise<void> {
         PUPPETEER_REVISIONS.chromium
       );
     } else if (product === 'firefox') {
-      (puppeteer as PuppeteerNode)._preferredRevision =
+      (puppeteer as PuppeteerNode).preferredRevision =
         PUPPETEER_REVISIONS.firefox;
       return getFirefoxNightlyVersion().catch((error) => {
         console.error(error);

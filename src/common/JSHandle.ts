@@ -329,9 +329,9 @@ export class JSHandle<HandleObjectType = unknown> {
 export class ElementHandle<
   ElementType extends Element = Element
 > extends JSHandle<ElementType> {
-  private _frame: Frame;
-  private _page: Page;
-  private _frameManager: FrameManager;
+  #frame: Frame;
+  #page: Page;
+  #frameManager: FrameManager;
 
   /**
    * @internal
@@ -347,9 +347,9 @@ export class ElementHandle<
     super(context, client, remoteObject);
     this._client = client;
     this._remoteObject = remoteObject;
-    this._frame = frame;
-    this._page = page;
-    this._frameManager = frameManager;
+    this.#frame = frame;
+    this.#page = page;
+    this.#frameManager = frameManager;
   }
 
   /**
@@ -498,7 +498,7 @@ export class ElementHandle<
       objectId: this._remoteObject.objectId,
     });
     if (typeof nodeInfo.node.frameId !== 'string') return null;
-    return this._frameManager.frame(nodeInfo.node.frameId);
+    return this.#frameManager.frame(nodeInfo.node.frameId);
   }
 
   private async _scrollIntoViewIfNeeded(): Promise<void> {
@@ -541,7 +541,7 @@ export class ElementHandle<
         }
         return false;
       },
-      this._page.isJavaScriptEnabled()
+      this.#page.isJavaScriptEnabled()
     );
 
     if (error) throw new Error(error);
@@ -569,7 +569,7 @@ export class ElementHandle<
         break;
       }
       const contentBoxQuad = result.model.content;
-      const topLeftCorner = this._fromProtocolQuad(contentBoxQuad)[0];
+      const topLeftCorner = this.#fromProtocolQuad(contentBoxQuad)[0];
       offsetX += topLeftCorner!.x;
       offsetY += topLeftCorner!.y;
       currentFrame = parent;
@@ -587,7 +587,7 @@ export class ElementHandle<
           objectId: this._remoteObject.objectId,
         })
         .catch(debugError),
-      this._page.client().send('Page.getLayoutMetrics'),
+      this.#page.client().send('Page.getLayoutMetrics'),
     ]);
     if (!result || !result.quads.length)
       throw new Error('Node is either not clickable or not an HTMLElement');
@@ -595,12 +595,12 @@ export class ElementHandle<
     // Fallback to `layoutViewport` in case of using Firefox.
     const { clientWidth, clientHeight } =
       layoutMetrics.cssLayoutViewport || layoutMetrics.layoutViewport;
-    const { offsetX, offsetY } = await this._getOOPIFOffsets(this._frame);
+    const { offsetX, offsetY } = await this._getOOPIFOffsets(this.#frame);
     const quads = result.quads
-      .map((quad) => this._fromProtocolQuad(quad))
+      .map((quad) => this.#fromProtocolQuad(quad))
       .map((quad) => applyOffsetsToQuad(quad, offsetX, offsetY))
       .map((quad) =>
-        this._intersectQuadWithViewport(quad, clientWidth, clientHeight)
+        this.#intersectQuadWithViewport(quad, clientWidth, clientHeight)
       )
       .filter((quad) => computeQuadArea(quad) > 1);
     if (!quads.length)
@@ -641,7 +641,7 @@ export class ElementHandle<
     };
   }
 
-  private _getBoxModel(): Promise<void | Protocol.DOM.GetBoxModelResponse> {
+  #getBoxModel(): Promise<void | Protocol.DOM.GetBoxModelResponse> {
     const params: Protocol.DOM.GetBoxModelRequest = {
       objectId: this._remoteObject.objectId,
     };
@@ -650,7 +650,7 @@ export class ElementHandle<
       .catch((error) => debugError(error));
   }
 
-  private _fromProtocolQuad(quad: number[]): Point[] {
+  #fromProtocolQuad(quad: number[]): Point[] {
     return [
       { x: quad[0]!, y: quad[1]! },
       { x: quad[2]!, y: quad[3]! },
@@ -659,7 +659,7 @@ export class ElementHandle<
     ];
   }
 
-  private _intersectQuadWithViewport(
+  #intersectQuadWithViewport(
     quad: Point[],
     width: number,
     height: number
@@ -678,7 +678,7 @@ export class ElementHandle<
   async hover(): Promise<void> {
     await this._scrollIntoViewIfNeeded();
     const { x, y } = await this.clickablePoint();
-    await this._page.mouse.move(x, y);
+    await this.#page.mouse.move(x, y);
   }
 
   /**
@@ -689,7 +689,7 @@ export class ElementHandle<
   async click(options: ClickOptions = {}): Promise<void> {
     await this._scrollIntoViewIfNeeded();
     const { x, y } = await this.clickablePoint(options.offset);
-    await this._page.mouse.click(x, y, options);
+    await this.#page.mouse.click(x, y, options);
   }
 
   /**
@@ -697,12 +697,12 @@ export class ElementHandle<
    */
   async drag(target: Point): Promise<Protocol.Input.DragData> {
     assert(
-      this._page.isDragInterceptionEnabled(),
+      this.#page.isDragInterceptionEnabled(),
       'Drag Interception is not enabled!'
     );
     await this._scrollIntoViewIfNeeded();
     const start = await this.clickablePoint();
-    return await this._page.mouse.drag(start, target);
+    return await this.#page.mouse.drag(start, target);
   }
 
   /**
@@ -713,7 +713,7 @@ export class ElementHandle<
   ): Promise<void> {
     await this._scrollIntoViewIfNeeded();
     const target = await this.clickablePoint();
-    await this._page.mouse.dragEnter(target, data);
+    await this.#page.mouse.dragEnter(target, data);
   }
 
   /**
@@ -724,7 +724,7 @@ export class ElementHandle<
   ): Promise<void> {
     await this._scrollIntoViewIfNeeded();
     const target = await this.clickablePoint();
-    await this._page.mouse.dragOver(target, data);
+    await this.#page.mouse.dragOver(target, data);
   }
 
   /**
@@ -735,7 +735,7 @@ export class ElementHandle<
   ): Promise<void> {
     await this._scrollIntoViewIfNeeded();
     const destination = await this.clickablePoint();
-    await this._page.mouse.drop(destination, data);
+    await this.#page.mouse.drop(destination, data);
   }
 
   /**
@@ -748,7 +748,7 @@ export class ElementHandle<
     await this._scrollIntoViewIfNeeded();
     const startPoint = await this.clickablePoint();
     const targetPoint = await target.clickablePoint();
-    await this._page.mouse.dragAndDrop(startPoint, targetPoint, options);
+    await this.#page.mouse.dragAndDrop(startPoint, targetPoint, options);
   }
 
   /**
@@ -885,7 +885,7 @@ export class ElementHandle<
   async tap(): Promise<void> {
     await this._scrollIntoViewIfNeeded();
     const { x, y } = await this.clickablePoint();
-    await this._page.touchscreen.tap(x, y);
+    await this.#page.touchscreen.tap(x, y);
   }
 
   /**
@@ -921,7 +921,7 @@ export class ElementHandle<
    */
   async type(text: string, options?: { delay: number }): Promise<void> {
     await this.focus();
-    await this._page.keyboard.type(text, options);
+    await this.#page.keyboard.type(text, options);
   }
 
   /**
@@ -940,7 +940,7 @@ export class ElementHandle<
    */
   async press(key: KeyInput, options?: PressOptions): Promise<void> {
     await this.focus();
-    await this._page.keyboard.press(key, options);
+    await this.#page.keyboard.press(key, options);
   }
 
   /**
@@ -948,11 +948,11 @@ export class ElementHandle<
    * or `null` if the element is not visible.
    */
   async boundingBox(): Promise<BoundingBox | null> {
-    const result = await this._getBoxModel();
+    const result = await this.#getBoxModel();
 
     if (!result) return null;
 
-    const { offsetX, offsetY } = await this._getOOPIFOffsets(this._frame);
+    const { offsetX, offsetY } = await this._getOOPIFOffsets(this.#frame);
     const quad = result.model.border;
     const x = Math.min(quad[0]!, quad[2]!, quad[4]!, quad[6]!);
     const y = Math.min(quad[1]!, quad[3]!, quad[5]!, quad[7]!);
@@ -971,31 +971,31 @@ export class ElementHandle<
    * Each Point is an object `{x, y}`. Box points are sorted clock-wise.
    */
   async boxModel(): Promise<BoxModel | null> {
-    const result = await this._getBoxModel();
+    const result = await this.#getBoxModel();
 
     if (!result) return null;
 
-    const { offsetX, offsetY } = await this._getOOPIFOffsets(this._frame);
+    const { offsetX, offsetY } = await this._getOOPIFOffsets(this.#frame);
 
     const { content, padding, border, margin, width, height } = result.model;
     return {
       content: applyOffsetsToQuad(
-        this._fromProtocolQuad(content),
+        this.#fromProtocolQuad(content),
         offsetX,
         offsetY
       ),
       padding: applyOffsetsToQuad(
-        this._fromProtocolQuad(padding),
+        this.#fromProtocolQuad(padding),
         offsetX,
         offsetY
       ),
       border: applyOffsetsToQuad(
-        this._fromProtocolQuad(border),
+        this.#fromProtocolQuad(border),
         offsetX,
         offsetY
       ),
       margin: applyOffsetsToQuad(
-        this._fromProtocolQuad(margin),
+        this.#fromProtocolQuad(margin),
         offsetX,
         offsetY
       ),
@@ -1015,7 +1015,7 @@ export class ElementHandle<
     let boundingBox = await this.boundingBox();
     assert(boundingBox, 'Node is either not visible or not an HTMLElement');
 
-    const viewport = this._page.viewport();
+    const viewport = this.#page.viewport();
     assert(viewport);
 
     if (
@@ -1026,7 +1026,7 @@ export class ElementHandle<
         width: Math.max(viewport.width, Math.ceil(boundingBox.width)),
         height: Math.max(viewport.height, Math.ceil(boundingBox.height)),
       };
-      await this._page.setViewport(Object.assign({}, viewport, newViewport));
+      await this.#page.setViewport(Object.assign({}, viewport, newViewport));
 
       needsViewportReset = true;
     }
@@ -1047,7 +1047,7 @@ export class ElementHandle<
     clip.x += pageX;
     clip.y += pageY;
 
-    const imageData = await this._page.screenshot(
+    const imageData = await this.#page.screenshot(
       Object.assign(
         {},
         {
@@ -1057,7 +1057,7 @@ export class ElementHandle<
       )
     );
 
-    if (needsViewportReset) await this._page.setViewport(viewport);
+    if (needsViewportReset) await this.#page.setViewport(viewport);
 
     return imageData;
   }

@@ -72,30 +72,37 @@ export interface PageBinding {
  * @internal
  */
 export class DOMWorld {
-  private _frameManager: FrameManager;
-  private _client: CDPSession;
-  private _frame: Frame;
-  private _timeoutSettings: TimeoutSettings;
-  private _documentPromise: Promise<ElementHandle> | null = null;
-  private _contextPromise: Promise<ExecutionContext> | null = null;
+  #frameManager: FrameManager;
+  #client: CDPSession;
+  #frame: Frame;
+  #timeoutSettings: TimeoutSettings;
+  #documentPromise: Promise<ElementHandle> | null = null;
+  #contextPromise: Promise<ExecutionContext> | null = null;
+  #contextResolveCallback: ((x: ExecutionContext) => void) | null = null;
+  #detached = false;
 
-  private _contextResolveCallback: ((x: ExecutionContext) => void) | null =
-    null;
-
-  private _detached = false;
-  /**
-   * @internal
-   */
-  _waitTasks = new Set<WaitTask>();
-
-  /**
-   * @internal
-   * Contains mapping from functions that should be bound to Puppeteer functions.
-   */
-  _boundFunctions = new Map<string, Function>();
   // Set of bindings that have been registered in the current context.
-  private _ctxBindings = new Set<string>();
-  private static bindingIdentifier = (name: string, contextId: number) =>
+  #ctxBindings = new Set<string>();
+
+  // Contains mapping from functions that should be bound to Puppeteer functions.
+  #boundFunctions = new Map<string, Function>();
+  #waitTasks = new Set<WaitTask>();
+
+  /**
+   * @internal
+   */
+  get _waitTasks(): Set<WaitTask> {
+    return this.#waitTasks;
+  }
+
+  /**
+   * @internal
+   */
+  get _boundFunctions(): Map<string, Function> {
+    return this.#boundFunctions;
+  }
+
+  static #bindingIdentifier = (name: string, contextId: number) =>
     `${name}_${contextId}`;
 
   constructor(
@@ -106,44 +113,52 @@ export class DOMWorld {
   ) {
     // Keep own reference to client because it might differ from the FrameManager's
     // client for OOP iframes.
-    this._client = client;
-    this._frameManager = frameManager;
-    this._frame = frame;
-    this._timeoutSettings = timeoutSettings;
+    this.#client = client;
+    this.#frameManager = frameManager;
+    this.#frame = frame;
+    this.#timeoutSettings = timeoutSettings;
     this._setContext(null);
-    this._onBindingCalled = this._onBindingCalled.bind(this);
-    this._client.on('Runtime.bindingCalled', this._onBindingCalled);
+    this.#client.on('Runtime.bindingCalled', this.#onBindingCalled);
   }
 
   frame(): Frame {
-    return this._frame;
+    return this.#frame;
   }
 
+  /**
+   * @internal
+   */
   async _setContext(context: ExecutionContext | null): Promise<void> {
     if (context) {
       assert(
-        this._contextResolveCallback,
+        this.#contextResolveCallback,
         'Execution Context has already been set.'
       );
-      this._ctxBindings.clear();
-      this._contextResolveCallback?.call(null, context);
-      this._contextResolveCallback = null;
+      this.#ctxBindings.clear();
+      this.#contextResolveCallback?.call(null, context);
+      this.#contextResolveCallback = null;
       for (const waitTask of this._waitTasks) waitTask.rerun();
     } else {
-      this._documentPromise = null;
-      this._contextPromise = new Promise((fulfill) => {
-        this._contextResolveCallback = fulfill;
+      this.#documentPromise = null;
+      this.#contextPromise = new Promise((fulfill) => {
+        this.#contextResolveCallback = fulfill;
       });
     }
   }
 
+  /**
+   * @internal
+   */
   _hasContext(): boolean {
-    return !this._contextResolveCallback;
+    return !this.#contextResolveCallback;
   }
 
+  /**
+   * @internal
+   */
   _detach(): void {
-    this._detached = true;
-    this._client.off('Runtime.bindingCalled', this._onBindingCalled);
+    this.#detached = true;
+    this.#client.off('Runtime.bindingCalled', this.#onBindingCalled);
     for (const waitTask of this._waitTasks)
       waitTask.terminate(
         new Error('waitForFunction failed: frame got detached.')
@@ -151,13 +166,13 @@ export class DOMWorld {
   }
 
   executionContext(): Promise<ExecutionContext> {
-    if (this._detached)
+    if (this.#detached)
       throw new Error(
-        `Execution context is not available in detached frame "${this._frame.url()}" (are you trying to evaluate?)`
+        `Execution context is not available in detached frame "${this.#frame.url()}" (are you trying to evaluate?)`
       );
-    if (this._contextPromise === null)
+    if (this.#contextPromise === null)
       throw new Error(`Execution content promise is missing`);
-    return this._contextPromise;
+    return this.#contextPromise;
   }
 
   async evaluateHandle<HandlerType extends JSHandle = JSHandle>(
@@ -187,9 +202,12 @@ export class DOMWorld {
     return value;
   }
 
+  /**
+   * @internal
+   */
   async _document(): Promise<ElementHandle> {
-    if (this._documentPromise) return this._documentPromise;
-    this._documentPromise = this.executionContext().then(async (context) => {
+    if (this.#documentPromise) return this.#documentPromise;
+    this.#documentPromise = this.executionContext().then(async (context) => {
       const document = await context.evaluateHandle('document');
       const element = document.asElement();
       if (element === null) {
@@ -197,7 +215,7 @@ export class DOMWorld {
       }
       return element;
     });
-    return this._documentPromise;
+    return this.#documentPromise;
   }
 
   async $x(expression: string): Promise<ElementHandle[]> {
@@ -263,7 +281,7 @@ export class DOMWorld {
   ): Promise<void> {
     const {
       waitUntil = ['load'],
-      timeout = this._timeoutSettings.navigationTimeout(),
+      timeout = this.#timeoutSettings.navigationTimeout(),
     } = options;
     // We rely upon the fact that document.open() will reset frame lifecycle with "init"
     // lifecycle event. @see https://crrev.com/608658
@@ -273,8 +291,8 @@ export class DOMWorld {
       document.close();
     }, html);
     const watcher = new LifecycleWatcher(
-      this._frameManager,
-      this._frame,
+      this.#frameManager,
+      this.#frame,
       waitUntil,
       timeout
     );
@@ -567,7 +585,7 @@ export class DOMWorld {
 
   // If multiple waitFor are set up asynchronously, we need to wait for the
   // first one to set up the binding in the page before running the others.
-  private _settingUpBinding: Promise<void> | null = null;
+  #settingUpBinding: Promise<void> | null = null;
   /**
    * @internal
    */
@@ -577,15 +595,15 @@ export class DOMWorld {
   ): Promise<void> {
     // Previous operation added the binding so we are done.
     if (
-      this._ctxBindings.has(
-        DOMWorld.bindingIdentifier(name, context._contextId)
+      this.#ctxBindings.has(
+        DOMWorld.#bindingIdentifier(name, context._contextId)
       )
     ) {
       return;
     }
     // Wait for other operation to finish
-    if (this._settingUpBinding) {
-      await this._settingUpBinding;
+    if (this.#settingUpBinding) {
+      await this.#settingUpBinding;
       return this.addBindingToContext(context, name);
     }
 
@@ -617,19 +635,19 @@ export class DOMWorld {
           return;
         }
       }
-      this._ctxBindings.add(
-        DOMWorld.bindingIdentifier(name, context._contextId)
+      this.#ctxBindings.add(
+        DOMWorld.#bindingIdentifier(name, context._contextId)
       );
     };
 
-    this._settingUpBinding = bind(name);
-    await this._settingUpBinding;
-    this._settingUpBinding = null;
+    this.#settingUpBinding = bind(name);
+    await this.#settingUpBinding;
+    this.#settingUpBinding = null;
   }
 
-  private async _onBindingCalled(
+  #onBindingCalled = async (
     event: Protocol.Runtime.BindingCalledEvent
-  ): Promise<void> {
+  ): Promise<void> => {
     let payload: { type: string; name: string; seq: number; args: unknown[] };
     if (!this._hasContext()) return;
     const context = await this.executionContext();
@@ -643,8 +661,8 @@ export class DOMWorld {
     const { type, name, seq, args } = payload;
     if (
       type !== 'internal' ||
-      !this._ctxBindings.has(
-        DOMWorld.bindingIdentifier(name, context._contextId)
+      !this.#ctxBindings.has(
+        DOMWorld.#bindingIdentifier(name, context._contextId)
       )
     )
       return;
@@ -673,7 +691,7 @@ export class DOMWorld {
       // @ts-ignore Code is evaluated in a different context.
       globalThis[name].callbacks.delete(seq);
     }
-  }
+  };
 
   /**
    * @internal
@@ -687,7 +705,7 @@ export class DOMWorld {
     const {
       visible: waitForVisible = false,
       hidden: waitForHidden = false,
-      timeout = this._timeoutSettings.timeout(),
+      timeout = this.#timeoutSettings.timeout(),
     } = options;
     const polling = waitForVisible || waitForHidden ? 'raf' : 'mutation';
     const title = `selector \`${selector}\`${
@@ -732,7 +750,7 @@ export class DOMWorld {
     const {
       visible: waitForVisible = false,
       hidden: waitForHidden = false,
-      timeout = this._timeoutSettings.timeout(),
+      timeout = this.#timeoutSettings.timeout(),
     } = options;
     const polling = waitForVisible || waitForHidden ? 'raf' : 'mutation';
     const title = `XPath \`${xpath}\`${waitForHidden ? ' to be hidden' : ''}`;
@@ -776,7 +794,7 @@ export class DOMWorld {
     options: { polling?: string | number; timeout?: number } = {},
     ...args: SerializableOrJSHandle[]
   ): Promise<JSHandle> {
-    const { polling = 'raf', timeout = this._timeoutSettings.timeout() } =
+    const { polling = 'raf', timeout = this.#timeoutSettings.timeout() } =
       options;
     const waitTaskOptions: WaitTaskOptions = {
       domWorld: this,
@@ -817,11 +835,11 @@ const noop = (): void => {};
  * @internal
  */
 export class WaitTask {
-  _domWorld: DOMWorld;
-  _polling: string | number;
-  _timeout: number;
-  _predicateBody: string;
-  _predicateAcceptsContextElement: boolean;
+  #domWorld: DOMWorld;
+  #polling: string | number;
+  #timeout: number;
+  #predicateBody: string;
+  #predicateAcceptsContextElement: boolean;
   _args: SerializableOrJSHandle[];
   _binding?: PageBinding;
   _runCount = 0;
@@ -850,19 +868,19 @@ export class WaitTask {
       return `return (${predicateBody})(...args);`;
     }
 
-    this._domWorld = options.domWorld;
-    this._polling = options.polling;
-    this._timeout = options.timeout;
+    this.#domWorld = options.domWorld;
+    this.#polling = options.polling;
+    this.#timeout = options.timeout;
     this._root = options.root || null;
-    this._predicateBody = getPredicateBody(options.predicateBody);
-    this._predicateAcceptsContextElement =
+    this.#predicateBody = getPredicateBody(options.predicateBody);
+    this.#predicateAcceptsContextElement =
       options.predicateAcceptsContextElement;
     this._args = options.args;
     this._binding = options.binding;
     this._runCount = 0;
-    this._domWorld._waitTasks.add(this);
+    this.#domWorld._waitTasks.add(this);
     if (this._binding) {
-      this._domWorld._boundFunctions.set(
+      this.#domWorld._boundFunctions.set(
         this._binding.name,
         this._binding.pptrFunction
       );
@@ -895,20 +913,20 @@ export class WaitTask {
     const runCount = ++this._runCount;
     let success: JSHandle | null = null;
     let error: Error | null = null;
-    const context = await this._domWorld.executionContext();
+    const context = await this.#domWorld.executionContext();
     if (this._terminated || runCount !== this._runCount) return;
     if (this._binding) {
-      await this._domWorld.addBindingToContext(context, this._binding.name);
+      await this.#domWorld.addBindingToContext(context, this._binding.name);
     }
     if (this._terminated || runCount !== this._runCount) return;
     try {
       success = await context.evaluateHandle(
         waitForPredicatePageFunction,
         this._root || null,
-        this._predicateBody,
-        this._predicateAcceptsContextElement,
-        this._polling,
-        this._timeout,
+        this.#predicateBody,
+        this.#predicateAcceptsContextElement,
+        this.#polling,
+        this.#timeout,
         ...this._args
       );
     } catch (error_) {
@@ -925,7 +943,7 @@ export class WaitTask {
     // throw an error - ignore this predicate run altogether.
     if (
       !error &&
-      (await this._domWorld.evaluate((s) => !s, success).catch(() => true))
+      (await this.#domWorld.evaluate((s) => !s, success).catch(() => true))
     ) {
       if (!success)
         throw new Error('Assertion: result handle is not available');
@@ -970,7 +988,7 @@ export class WaitTask {
 
   _cleanup(): void {
     this._timeoutTimer !== undefined && clearTimeout(this._timeoutTimer);
-    this._domWorld._waitTasks.delete(this);
+    this.#domWorld._waitTasks.delete(this);
   }
 }
 
